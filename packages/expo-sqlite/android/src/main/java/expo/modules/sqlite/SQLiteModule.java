@@ -2,6 +2,12 @@
 package expo.modules.sqlite;
 
 import android.content.Context;
+import android.database.Cursor;
+
+import expo.modules.sqlite.wrappers.DatabaseWrapper;
+import expo.modules.sqlite.wrappers.StatementWrapper;
+import expo.modules.sqlite.wrappers.SQLiteDatabaseWrapper;
+import expo.modules.sqlite.wrappers.SQLCipherDatabaseWrapper;
 
 import java.io.File;
 import java.io.IOException;
@@ -9,10 +15,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
-import net.sqlcipher.Cursor;
-import net.sqlcipher.database.SQLiteDatabase;
-import net.sqlcipher.database.SQLiteStatement;
 
 import org.unimodules.core.ExportedModule;
 import org.unimodules.core.Promise;
@@ -27,13 +29,13 @@ public class SQLiteModule extends ExportedModule {
   private static final String[] EMPTY_COLUMNS = new String[]{};
   private static final SQLitePluginResult EMPTY_RESULT = new SQLitePluginResult(EMPTY_ROWS, EMPTY_COLUMNS, 0, 0, null);
 
-  private static final Map<String, SQLiteDatabase> DATABASES = new HashMap<String, SQLiteDatabase>();
+  private static final Map<String, DatabaseWrapper> DATABASES = new HashMap<String, DatabaseWrapper>();
 
   private Context mContext;
 
   public SQLiteModule(Context scopedContext) {
     super(scopedContext);
-    SQLiteDatabase.loadLibs(scopedContext);
+    SQLCipherDatabaseWrapper.loadLibs(scopedContext);
     mContext = scopedContext;
   }
 
@@ -47,7 +49,7 @@ public class SQLiteModule extends ExportedModule {
     try {
       int numQueries = queries.size();
       SQLitePluginResult[] results = new SQLitePluginResult[numQueries];
-      SQLiteDatabase db = getDatabase(dbName, dbKey);
+      DatabaseWrapper db = getDatabase(dbName, dbKey);
 
       for (int i = 0; i < numQueries; i++) {
         ArrayList<Object> sqlQuery = queries.get(i);
@@ -86,8 +88,8 @@ public class SQLiteModule extends ExportedModule {
 
   // do a update/delete/insert operation
   private SQLitePluginResult doUpdateInBackgroundAndPossiblyThrow(String sql, String[] bindArgs,
-                                                                  SQLiteDatabase db) {
-    SQLiteStatement statement = null;
+                                                                  DatabaseWrapper db) {
+    StatementWrapper statement = null;
     try {
       statement = db.compileStatement(sql);
       if (bindArgs != null) {
@@ -121,7 +123,7 @@ public class SQLiteModule extends ExportedModule {
 
   // do a select operation
   private SQLitePluginResult doSelectInBackgroundAndPossiblyThrow(String sql, String[] bindArgs,
-                                                                  SQLiteDatabase db) {
+                                                                  DatabaseWrapper db) {
     Cursor cursor = null;
     try {
       cursor = db.rawQuery(sql, bindArgs);
@@ -188,15 +190,19 @@ public class SQLiteModule extends ExportedModule {
     return directory + File.separator + name;
   }
 
-  private SQLiteDatabase getDatabase(String name, String key) throws IOException {
-    SQLiteDatabase database = null;
+  private DatabaseWrapper getDatabase(String name, String key) throws IOException {
+    DatabaseWrapper database = null;
     String path = pathForDatabaseName(name);
     if ((new File(path)).exists()) {
       database = DATABASES.get(name);
     }
     if (database == null) {
       DATABASES.remove(name);
-      database = SQLiteDatabase.openOrCreateDatabase(path, key, null);
+      if (key == null || "".equals(key)) {
+        database = SQLiteDatabaseWrapper.openOrCreateDatabase(path);
+      } else {
+        database = SQLCipherDatabaseWrapper.openOrCreateDatabase(path, key);
+      }
       DATABASES.put(name, database);
     }
     return database;
